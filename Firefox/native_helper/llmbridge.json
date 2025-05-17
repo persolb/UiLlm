@@ -1,0 +1,7 @@
+{
+  "name": "com.myext.llmbridge",
+  "description": "LLM bridge for content extraction",
+  "path": "helper.py",
+  "type": "stdio",
+  "allowed_extensions": ["llmcontentextractor@example.com"]
+}
