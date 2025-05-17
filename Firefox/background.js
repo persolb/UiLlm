@@ -36,7 +36,7 @@ const MAX_TEXT_LENGTH = 500;  // Increased for better context
 const MAX_NESTING_DEPTH = 3;  // Reduced to focus on main content
 
 // Debug mode settings
-const DEBUG_MODE = false;  // Toggle debug mode
+const DEBUG_MODE = true;  // Toggle debug mode
 const DEBUG_COLORS = {
     'main-text': 'rgba(144, 238, 144, 0.3)',    // light green
     'main-widget': 'rgba(144, 238, 144, 0.3)',  // light green
@@ -484,15 +484,20 @@ browser.runtime.onConnect.addListener((port) => {
                         
                         // Create debug overlay if in debug mode
                         if (DEBUG_MODE && result.selectors) {
-                            browser.scripting.executeScript({
-                                target: { tabId: currentTabId },
-                                func: createDebugOverlay,
-                                args: [result.selectors]
-                            }).catch(error => {
-                                console.error('Failed to create debug overlay:', error);
-                            });
+                            try {
+                                console.log('Sending debug overlay to tab:', currentTabId);
+                                // Send the selectors back to the content script
+                                await browser.tabs.sendMessage(currentTabId, {
+                                    type: 'createDebugOverlay',
+                                    selectors: result.selectors
+                                });
+                                console.log('Debug overlay message sent successfully');
+                            } catch (error) {
+                                console.error('Failed to send debug overlay message:', error);
+                            }
                         }
                         
+                        // Send the classification result back to the content script
                         port.postMessage({ type: 'classifyDOM', result });
                     } catch (error) {
                         console.error('LLM processing error:', error);

@@ -141,11 +141,13 @@ const DEBUG_COLORS = {
 
 // Create debug overlay with highlighted elements
 function createDebugOverlay(selectors) {
-    console.log('Creating debug overlay with selectors:', selectors);
+    console.log('=== Creating Debug Overlay ===');
+    console.log('Selectors:', selectors);
     
     // Remove existing overlay if any
     const existingOverlay = document.getElementById('uillm-debug-overlay');
     if (existingOverlay) {
+        console.log('Removing existing overlay');
         existingOverlay.remove();
     }
     
@@ -160,46 +162,59 @@ function createDebugOverlay(selectors) {
         height: 100%;
         pointer-events: none;
         z-index: 2147483647;
+        background: transparent;
     `;
     
     // Create highlight elements for each selector
     selectors.forEach(selector => {
-        const elements = document.querySelectorAll(selector.css);
-        console.log(`Found ${elements.length} elements for selector:`, selector);
-        
-        elements.forEach(element => {
-            const rect = element.getBoundingClientRect();
-            const highlight = document.createElement('div');
+        console.log(`Processing selector: ${selector.name} (${selector.css})`);
+        try {
+            const elements = document.querySelectorAll(selector.css);
+            console.log(`Found ${elements.length} elements for selector:`, selector);
             
-            // Determine color based on category
-            let color = DEBUG_COLORS.ignore;
-            if (selector.name.startsWith('ignore-')) {
-                color = DEBUG_COLORS.ignore;
-            } else if (selector.name === 'main-text' || selector.name === 'main-widget') {
-                color = DEBUG_COLORS['main-text'];
-            } else if (selector.name === 'branding') {
-                color = DEBUG_COLORS.branding;
-            } else if (selector.name === 'nav') {
-                color = DEBUG_COLORS.nav;
-            }
-            
-            highlight.style.cssText = `
-                position: absolute;
-                top: ${rect.top + window.scrollY}px;
-                left: ${rect.left + window.scrollX}px;
-                width: ${rect.width}px;
-                height: ${rect.height}px;
-                background-color: ${color};
-                border: 1px solid ${color.replace('0.3', '0.8')};
-                pointer-events: none;
-                z-index: 2147483646;
-            `;
-            
-            // Add tooltip with category and selector
-            highlight.title = `${selector.name}\n${selector.css}`;
-            
-            overlay.appendChild(highlight);
-        });
+            elements.forEach((element, index) => {
+                const rect = element.getBoundingClientRect();
+                if (rect.width === 0 || rect.height === 0) {
+                    console.log(`Skipping element ${index} with zero dimensions`);
+                    return;
+                }
+                
+                const highlight = document.createElement('div');
+                
+                // Determine color based on category
+                let color = DEBUG_COLORS.ignore;
+                if (selector.name.startsWith('ignore-')) {
+                    color = DEBUG_COLORS.ignore;
+                } else if (selector.name === 'main-text' || selector.name === 'main-widget') {
+                    color = DEBUG_COLORS['main-text'];
+                } else if (selector.name === 'branding') {
+                    color = DEBUG_COLORS.branding;
+                } else if (selector.name === 'nav') {
+                    color = DEBUG_COLORS.nav;
+                }
+                
+                highlight.style.cssText = `
+                    position: absolute;
+                    top: ${rect.top + window.scrollY}px;
+                    left: ${rect.left + window.scrollX}px;
+                    width: ${rect.width}px;
+                    height: ${rect.height}px;
+                    background-color: ${color};
+                    border: 2px solid ${color.replace('0.3', '0.8')};
+                    pointer-events: none;
+                    z-index: 2147483646;
+                    box-sizing: border-box;
+                `;
+                
+                // Add tooltip with category and selector
+                highlight.title = `${selector.name}\n${selector.css}`;
+                
+                overlay.appendChild(highlight);
+                console.log(`Added highlight for element ${index}`);
+            });
+        } catch (error) {
+            console.error(`Error processing selector ${selector.name}:`, error);
+        }
     });
     
     // Add legend
@@ -215,6 +230,7 @@ function createDebugOverlay(selectors) {
         font-family: Arial, sans-serif;
         font-size: 12px;
         z-index: 2147483647;
+        pointer-events: auto;
     `;
     
     Object.entries(DEBUG_COLORS).forEach(([category, color]) => {
@@ -244,12 +260,14 @@ function createDebugOverlay(selectors) {
     
     overlay.appendChild(legend);
     document.body.appendChild(overlay);
+    console.log('Debug overlay added to page');
     
     // Update positions on scroll and resize
     let updateTimeout;
     function updatePositions() {
         if (updateTimeout) clearTimeout(updateTimeout);
         updateTimeout = setTimeout(() => {
+            console.log('Updating overlay positions');
             overlay.remove();
             createDebugOverlay(selectors);
         }, 100);
@@ -257,6 +275,12 @@ function createDebugOverlay(selectors) {
     
     window.addEventListener('scroll', updatePositions);
     window.addEventListener('resize', updatePositions);
+    
+    // Log final state
+    console.log('Debug overlay creation complete');
+    console.log('Overlay element:', overlay);
+    console.log('Overlay parent:', overlay.parentElement);
+    console.log('Overlay style:', overlay.style.cssText);
 }
 
 // Helper function for port-based communication
