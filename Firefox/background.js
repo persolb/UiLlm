@@ -35,6 +35,16 @@ const CONTENT_TAGS = new Set([
 const MAX_TEXT_LENGTH = 500;  // Increased for better context
 const MAX_NESTING_DEPTH = 3;  // Reduced to focus on main content
 
+// Debug mode settings
+const DEBUG_MODE = false;  // Toggle debug mode
+const DEBUG_COLORS = {
+    'main-text': 'rgba(144, 238, 144, 0.3)',    // light green
+    'main-widget': 'rgba(144, 238, 144, 0.3)',  // light green
+    'branding': 'rgba(255, 255, 0, 0.3)',       // yellow
+    'nav': 'rgba(173, 216, 230, 0.3)',          // light blue
+    'ignore': 'rgba(255, 0, 0, 0.3)'            // red
+};
+
 // Clean snapshot by removing unwanted elements and simplifying structure
 function cleanSnapshot(snapshot) {
     console.log('Starting cleanSnapshot with input:', snapshot);
@@ -306,45 +316,139 @@ async function fetchLLM(prompt) {
     }
 }
 
+// Create debug overlay with highlighted elements
+function createDebugOverlay(selectors) {
+    if (!DEBUG_MODE) return;
+    
+    console.log('Creating debug overlay with selectors:', selectors);
+    
+    // Create overlay container
+    const overlay = document.createElement('div');
+    overlay.id = 'uillm-debug-overlay';
+    overlay.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+        z-index: 2147483647;
+    `;
+    
+    // Create highlight elements for each selector
+    selectors.forEach(selector => {
+        const elements = document.querySelectorAll(selector.css);
+        console.log(`Found ${elements.length} elements for selector:`, selector);
+        
+        elements.forEach(element => {
+            const rect = element.getBoundingClientRect();
+            const highlight = document.createElement('div');
+            
+            // Determine color based on category
+            let color = DEBUG_COLORS.ignore;
+            if (selector.name.startsWith('ignore-')) {
+                color = DEBUG_COLORS.ignore;
+            } else if (selector.name === 'main-text' || selector.name === 'main-widget') {
+                color = DEBUG_COLORS['main-text'];
+            } else if (selector.name === 'branding') {
+                color = DEBUG_COLORS.branding;
+            } else if (selector.name === 'nav') {
+                color = DEBUG_COLORS.nav;
+            }
+            
+            highlight.style.cssText = `
+                position: absolute;
+                top: ${rect.top + window.scrollY}px;
+                left: ${rect.left + window.scrollX}px;
+                width: ${rect.width}px;
+                height: ${rect.height}px;
+                background-color: ${color};
+                border: 1px solid ${color.replace('0.3', '0.8')};
+                pointer-events: none;
+                z-index: 2147483646;
+            `;
+            
+            // Add tooltip with category and selector
+            highlight.title = `${selector.name}\n${selector.css}`;
+            
+            overlay.appendChild(highlight);
+        });
+    });
+    
+    // Add legend
+    const legend = document.createElement('div');
+    legend.style.cssText = `
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        background: white;
+        padding: 10px;
+        border-radius: 5px;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        font-family: Arial, sans-serif;
+        font-size: 12px;
+        z-index: 2147483647;
+    `;
+    
+    Object.entries(DEBUG_COLORS).forEach(([category, color]) => {
+        const item = document.createElement('div');
+        item.style.cssText = `
+            display: flex;
+            align-items: center;
+            margin: 5px 0;
+        `;
+        
+        const swatch = document.createElement('div');
+        swatch.style.cssText = `
+            width: 15px;
+            height: 15px;
+            background-color: ${color};
+            border: 1px solid ${color.replace('0.3', '0.8')};
+            margin-right: 8px;
+        `;
+        
+        const label = document.createElement('span');
+        label.textContent = category;
+        
+        item.appendChild(swatch);
+        item.appendChild(label);
+        legend.appendChild(item);
+    });
+    
+    overlay.appendChild(legend);
+    document.body.appendChild(overlay);
+    
+    // Update positions on scroll and resize
+    let updateTimeout;
+    function updatePositions() {
+        if (updateTimeout) clearTimeout(updateTimeout);
+        updateTimeout = setTimeout(() => {
+            overlay.remove();
+            createDebugOverlay(selectors);
+        }, 100);
+    }
+    
+    window.addEventListener('scroll', updatePositions);
+    window.addEventListener('resize', updatePositions);
+}
+
 // Message router
 browser.runtime.onConnect.addListener((port) => {
     console.log('New connection:', port.name);
     if (port.name === 'llm') {
         llmPorts.add(port);
         
+        // Store the tab ID when connection is established
+        let currentTabId = null;
+        
         port.onMessage.addListener(async (msg) => {
             console.log('Received LLM port message:', msg.type);
             try {
-                if (msg.type === 'pingLLM') {
-                    console.log('Testing LLM connection...');
-                    const { apiKey } = await browser.storage.local.get('apiKey');
-                    if (!apiKey) throw new Error('API key not set');
-
-                    const resp = await fetch('https://api.openai.com/v1/chat/completions', {
-                        method: 'POST',
-                        headers: {
-                            'Authorization': `Bearer ${apiKey}`,
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({
-                            model: 'gpt-4-turbo-preview',
-                            messages: [{ role: 'user', content: 'Say exactly: ok' }],
-                            temperature: 0.1
-                        })
-                    });
-
-                    if (!resp.ok) {
-                        const error = await resp.text();
-                        throw new Error(`API error: ${error}`);
-                    }
-
-                    const data = await resp.json();
-                    const content = data.choices[0].message.content.toLowerCase().trim();
-                    const result = content === 'ok' || content === 'ok.';
-                    port.postMessage({ type: 'pingLLM', result });
-                }
-                
                 if (msg.type === 'classifyDOM') {
+                    // Store the tab ID from the message
+                    currentTabId = msg.tabId;
+                    console.log('Processing classification for tab:', currentTabId);
+                    
                     console.log('Classifying DOM...');
                     console.log('Received snapshot:', msg.snapshot);
                     
@@ -377,6 +481,18 @@ browser.runtime.onConnect.addListener((port) => {
                     try {
                         const result = await fetchLLM(prompt);
                         console.log('Classification result:', result);
+                        
+                        // Create debug overlay if in debug mode
+                        if (DEBUG_MODE && result.selectors) {
+                            browser.scripting.executeScript({
+                                target: { tabId: currentTabId },
+                                func: createDebugOverlay,
+                                args: [result.selectors]
+                            }).catch(error => {
+                                console.error('Failed to create debug overlay:', error);
+                            });
+                        }
+                        
                         port.postMessage({ type: 'classifyDOM', result });
                     } catch (error) {
                         console.error('LLM processing error:', error);
@@ -390,6 +506,14 @@ browser.runtime.onConnect.addListener((port) => {
                 if (msg.type === 'openViewer') {
                     console.log('Opening viewer with data:', msg.data);
                     latestResult = msg.data;
+                    
+                    // Skip opening viewer in debug mode
+                    if (DEBUG_MODE) {
+                        console.log('Debug mode active - skipping viewer');
+                        port.postMessage({ type: 'openViewer', success: true, debugMode: true });
+                        return;
+                    }
+                    
                     const viewerUrl = browser.runtime.getURL('ui/viewer.html');
                     await browser.tabs.create({ url: viewerUrl });
                     port.postMessage({ type: 'openViewer', success: true });
@@ -417,9 +541,68 @@ browser.runtime.onConnect.addListener((port) => {
 });
 
 // Handle toolbar button click
-browser.action.onClicked.addListener((tab) => {
-    console.log('Toolbar button clicked for tab:', tab.id);
-    browser.tabs.sendMessage(tab.id, { type: 'runCleaner' });
+browser.action.onClicked.addListener(async (tab) => {
+    console.log('=== Toolbar Button Clicked ===');
+    console.log('Tab ID:', tab.id);
+    console.log('Tab URL:', tab.url);
+    
+    try {
+        // First, ensure content script is loaded
+        console.log('1. Checking if content script is loaded...');
+        try {
+            // Try sending a ping message first
+            const pingResponse = await browser.tabs.sendMessage(tab.id, { 
+                type: 'ping',
+                tab: { id: tab.id, url: tab.url }
+            });
+            console.log('2. Content script is already loaded, ping response:', pingResponse);
+            
+            // If we got a tab ID back, store it
+            if (pingResponse && pingResponse.tabId) {
+                console.log('3. Content script confirmed tab ID:', pingResponse.tabId);
+            }
+        } catch (error) {
+            console.log('2. Content script not loaded, injecting...');
+            // Inject content script with tab ID in URL
+            await browser.scripting.executeScript({
+                target: { tabId: tab.id },
+                files: ['content.js']
+            });
+            console.log('3. Content script injected successfully');
+            
+            // Wait a moment for the script to initialize
+            await new Promise(resolve => setTimeout(resolve, 100));
+            
+            // Send initial ping to store tab ID
+            const initResponse = await browser.tabs.sendMessage(tab.id, { 
+                type: 'ping',
+                tab: { id: tab.id, url: tab.url }
+            });
+            console.log('4. Initial ping response:', initResponse);
+        }
+        
+        // Then send the runCleaner message
+        console.log('5. Sending runCleaner message...');
+        const response = await browser.tabs.sendMessage(tab.id, { 
+            type: 'runCleaner',
+            tab: { id: tab.id, url: tab.url }
+        });
+        console.log('6. runCleaner message sent successfully, response:', response);
+    } catch (error) {
+        console.error('Error in toolbar button handler:', error);
+        // If the error is because the content script is already loaded, try sending the message anyway
+        if (error.message.includes('Content script already injected')) {
+            try {
+                const response = await browser.tabs.sendMessage(tab.id, { 
+                    type: 'runCleaner',
+                    tab: { id: tab.id, url: tab.url }
+                });
+                console.log('runCleaner message sent successfully after retry, response:', response);
+            } catch (retryError) {
+                console.error('Failed to send message even after retry:', retryError);
+            }
+        }
+    }
 });
 
 // expose result to viewer

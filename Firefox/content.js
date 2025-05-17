@@ -1,3 +1,19 @@
+// Add initialization logging at the very top of the file
+console.log('=== Content Script Loading ===');
+console.log('URL:', window.location.href);
+console.log('Document ready state:', document.readyState);
+
+// Store tab ID
+let currentTabId = null;
+
+// Get tab ID from URL parameters
+const urlParams = new URLSearchParams(window.location.search);
+const tabIdParam = urlParams.get('tabId');
+if (tabIdParam) {
+    currentTabId = parseInt(tabIdParam, 10);
+    console.log('Got tab ID from URL:', currentTabId);
+}
+
 // Utility functions
 function prune(text) {
   return (text || '').trim().slice(0, 32);
@@ -111,48 +127,258 @@ function cleanText(text) {
     return text.trim();
 }
 
+// Add initialization logging
+console.log('Content script loaded for:', window.location.href);
+
+// Debug mode settings
+const DEBUG_COLORS = {
+    'main-text': 'rgba(144, 238, 144, 0.3)',    // light green
+    'main-widget': 'rgba(144, 238, 144, 0.3)',  // light green
+    'branding': 'rgba(255, 255, 0, 0.3)',       // yellow
+    'nav': 'rgba(173, 216, 230, 0.3)',          // light blue
+    'ignore': 'rgba(255, 0, 0, 0.3)'            // red
+};
+
+// Create debug overlay with highlighted elements
+function createDebugOverlay(selectors) {
+    console.log('Creating debug overlay with selectors:', selectors);
+    
+    // Remove existing overlay if any
+    const existingOverlay = document.getElementById('uillm-debug-overlay');
+    if (existingOverlay) {
+        existingOverlay.remove();
+    }
+    
+    // Create overlay container
+    const overlay = document.createElement('div');
+    overlay.id = 'uillm-debug-overlay';
+    overlay.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+        z-index: 2147483647;
+    `;
+    
+    // Create highlight elements for each selector
+    selectors.forEach(selector => {
+        const elements = document.querySelectorAll(selector.css);
+        console.log(`Found ${elements.length} elements for selector:`, selector);
+        
+        elements.forEach(element => {
+            const rect = element.getBoundingClientRect();
+            const highlight = document.createElement('div');
+            
+            // Determine color based on category
+            let color = DEBUG_COLORS.ignore;
+            if (selector.name.startsWith('ignore-')) {
+                color = DEBUG_COLORS.ignore;
+            } else if (selector.name === 'main-text' || selector.name === 'main-widget') {
+                color = DEBUG_COLORS['main-text'];
+            } else if (selector.name === 'branding') {
+                color = DEBUG_COLORS.branding;
+            } else if (selector.name === 'nav') {
+                color = DEBUG_COLORS.nav;
+            }
+            
+            highlight.style.cssText = `
+                position: absolute;
+                top: ${rect.top + window.scrollY}px;
+                left: ${rect.left + window.scrollX}px;
+                width: ${rect.width}px;
+                height: ${rect.height}px;
+                background-color: ${color};
+                border: 1px solid ${color.replace('0.3', '0.8')};
+                pointer-events: none;
+                z-index: 2147483646;
+            `;
+            
+            // Add tooltip with category and selector
+            highlight.title = `${selector.name}\n${selector.css}`;
+            
+            overlay.appendChild(highlight);
+        });
+    });
+    
+    // Add legend
+    const legend = document.createElement('div');
+    legend.style.cssText = `
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        background: white;
+        padding: 10px;
+        border-radius: 5px;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        font-family: Arial, sans-serif;
+        font-size: 12px;
+        z-index: 2147483647;
+    `;
+    
+    Object.entries(DEBUG_COLORS).forEach(([category, color]) => {
+        const item = document.createElement('div');
+        item.style.cssText = `
+            display: flex;
+            align-items: center;
+            margin: 5px 0;
+        `;
+        
+        const swatch = document.createElement('div');
+        swatch.style.cssText = `
+            width: 15px;
+            height: 15px;
+            background-color: ${color};
+            border: 1px solid ${color.replace('0.3', '0.8')};
+            margin-right: 8px;
+        `;
+        
+        const label = document.createElement('span');
+        label.textContent = category;
+        
+        item.appendChild(swatch);
+        item.appendChild(label);
+        legend.appendChild(item);
+    });
+    
+    overlay.appendChild(legend);
+    document.body.appendChild(overlay);
+    
+    // Update positions on scroll and resize
+    let updateTimeout;
+    function updatePositions() {
+        if (updateTimeout) clearTimeout(updateTimeout);
+        updateTimeout = setTimeout(() => {
+            overlay.remove();
+            createDebugOverlay(selectors);
+        }, 100);
+    }
+    
+    window.addEventListener('scroll', updatePositions);
+    window.addEventListener('resize', updatePositions);
+}
+
 // Helper function for port-based communication
 async function communicateWithLLM(message) {
+    console.log('=== Setting up LLM Communication ===');
+    console.log('Message type:', message.type);
+    console.log('Current tab ID:', currentTabId);
+    
     const port = browser.runtime.connect({ name: "llm" });
+    console.log('LLM port connected');
+    
+    // Use stored tab ID
+    if (currentTabId) {
+        message.tabId = currentTabId;
+        console.log('Using stored tab ID:', currentTabId);
+    } else {
+        console.warn('No tab ID available');
+    }
     
     return new Promise((resolve, reject) => {
+        // Set up message handler
         port.onMessage.addListener((response) => {
+            console.log('=== Received LLM Port Response ===');
+            console.log('Response type:', response.type);
+            console.log('Response data:', response);
+            
             if (response.type === 'error') {
+                console.error('LLM port error:', response.error);
                 reject(new Error(response.error));
             } else {
+                console.log('LLM port success, resolving with:', response);
                 resolve(response);
             }
         });
         
-        port.postMessage(message);
+        // Set up disconnect handler
+        port.onDisconnect.addListener((p) => {
+            console.log('=== LLM Port Disconnected ===');
+            if (p.error) {
+                console.error('Port disconnected with error:', p.error);
+                reject(new Error(p.error.message));
+            }
+        });
+        
+        // Send the message
+        console.log('Sending message to LLM port:', message);
+        try {
+            port.postMessage(message);
+            console.log('Message sent to LLM port successfully');
+        } catch (error) {
+            console.error('Error sending message to LLM port:', error);
+            reject(error);
+        }
     });
 }
 
 // Message handler
-browser.runtime.onMessage.addListener(async (msg) => {
-    if (msg.type === 'runCleaner') {
-        try {
-            console.log('Starting content extraction...');
-            // Get DOM snapshot
-            const domSnapshot = createSnapshot();
-            console.log('DOM snapshot created:', domSnapshot.length, 'elements');
-            
-            // Send to background for LLM processing using port
-            console.log('Sending snapshot to background for LLM processing...');
-            const response = await communicateWithLLM({
-                type: 'classifyDOM',
-                snapshot: domSnapshot
-            });
+browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    console.log('=== Content Script Message Received ===');
+    console.log('Message type:', message.type);
+    console.log('Sender:', sender);
+    console.log('Current URL:', window.location.href);
+    console.log('Current tab ID:', currentTabId);
+    
+    // Store tab ID if provided in message
+    if (message.tab && message.tab.id) {
+        currentTabId = message.tab.id;
+        console.log('Stored tab ID from message:', currentTabId);
+    }
+    
+    if (message.type === 'ping') {
+        console.log('Received ping, responding...');
+        sendResponse({ success: true, tabId: currentTabId });
+        return false;
+    }
+    
+    if (message.type === 'createDebugOverlay') {
+        console.log('Creating debug overlay with selectors:', message.selectors);
+        createDebugOverlay(message.selectors);
+        sendResponse({ success: true });
+        return false;
+    }
+    
+    if (message.type === 'runCleaner') {
+        console.log('=== Starting runCleaner Handler ===');
+        // Use an IIFE to handle async operations
+        (async () => {
+            try {
+                if (!currentTabId) {
+                    throw new Error('No tab ID available');
+                }
+                
+                console.log('1. Starting content extraction...');
+                // Get DOM snapshot
+                const domSnapshot = createSnapshot();
+                console.log('2. DOM snapshot created:', domSnapshot.length, 'elements');
+                console.log('3. Using stored tab ID:', currentTabId);
+                
+                // Send to background for LLM processing using port
+                console.log('4. Setting up LLM communication...');
+                const response = await communicateWithLLM({
+                    type: 'classifyDOM',
+                    snapshot: domSnapshot,
+                    tabId: currentTabId
+                });
 
-            if (response && response.result) {
-                console.log('Received selectors from LLM:', response.result);
-                await applySelectors(response.result);
-            } else {
-                console.error('Failed to get selectors from LLM');
+                console.log('5. Received response from LLM:', response);
+                if (response && response.result) {
+                    console.log('6. Processing LLM result...');
+                    await applySelectors(response.result);
+                    console.log('7. Selectors applied successfully');
+                    sendResponse({ success: true });
+                } else {
+                    console.error('Failed to get selectors from LLM');
+                    sendResponse({ type: 'error', error: 'No valid result from LLM' });
+                }
+            } catch (error) {
+                console.error('Error in runCleaner:', error);
+                sendResponse({ type: 'error', error: error.message });
             }
-        } catch (e) {
-            console.error('Error in content script:', e);
-        }
+        })();
+        return true; // Keep the message channel open for async response
     }
 });
 

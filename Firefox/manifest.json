@@ -5,7 +5,9 @@
   "description": "Extracts useful content and controls with the help of an LLM.",
   "permissions": [
     "storage",
-    "activeTab"
+    "activeTab",
+    "tabs",
+    "scripting"
   ],
   "host_permissions": [
     "https://api.openai.com/*"
