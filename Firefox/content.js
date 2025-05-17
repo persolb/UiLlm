@@ -111,7 +111,52 @@ function cleanText(text) {
     return text.trim();
 }
 
-// Apply selectors and extract content
+// Helper function for port-based communication
+async function communicateWithLLM(message) {
+    const port = browser.runtime.connect({ name: "llm" });
+    
+    return new Promise((resolve, reject) => {
+        port.onMessage.addListener((response) => {
+            if (response.type === 'error') {
+                reject(new Error(response.error));
+            } else {
+                resolve(response);
+            }
+        });
+        
+        port.postMessage(message);
+    });
+}
+
+// Message handler
+browser.runtime.onMessage.addListener(async (msg) => {
+    if (msg.type === 'runCleaner') {
+        try {
+            console.log('Starting content extraction...');
+            // Get DOM snapshot
+            const domSnapshot = createSnapshot();
+            console.log('DOM snapshot created:', domSnapshot.length, 'elements');
+            
+            // Send to background for LLM processing using port
+            console.log('Sending snapshot to background for LLM processing...');
+            const response = await communicateWithLLM({
+                type: 'classifyDOM',
+                snapshot: domSnapshot
+            });
+
+            if (response && response.result) {
+                console.log('Received selectors from LLM:', response.result);
+                await applySelectors(response.result);
+            } else {
+                console.error('Failed to get selectors from LLM');
+            }
+        } catch (e) {
+            console.error('Error in content script:', e);
+        }
+    }
+});
+
+// Update applySelectors to use port communication
 async function applySelectors(selectors) {
     if (!selectors || !selectors.selectors) return;
 
@@ -156,7 +201,7 @@ async function applySelectors(selectors) {
         }
     }
 
-    // Store result and open viewer
+    // Store result and open viewer using port
     await browser.storage.local.set({ 
         lastExtraction: { 
             result, 
@@ -166,37 +211,9 @@ async function applySelectors(selectors) {
         }
     });
 
-    // Open viewer in new tab
-    await browser.runtime.sendMessage({ 
+    // Open viewer in new tab using port
+    await communicateWithLLM({ 
         type: 'openViewer',
         data: { result, groups }
     });
 }
-
-// Message handler
-browser.runtime.onMessage.addListener(async (msg) => {
-    if (msg.type === 'runCleaner') {
-        try {
-            console.log('Starting content extraction...');
-            // Get DOM snapshot
-            const domSnapshot = createSnapshot();
-            console.log('DOM snapshot created:', domSnapshot.length, 'elements');
-            
-            // Send to background for LLM processing
-            console.log('Sending snapshot to background for LLM processing...');
-            const selectors = await browser.runtime.sendMessage({
-                type: 'classifyDOM',
-                snapshot: domSnapshot
-            });
-
-            if (selectors) {
-                console.log('Received selectors from LLM:', selectors);
-                await applySelectors(selectors);
-            } else {
-                console.error('Failed to get selectors from LLM');
-            }
-        } catch (e) {
-            console.error('Error in content script:', e);
-        }
-    }
-});

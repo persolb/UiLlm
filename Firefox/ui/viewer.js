@@ -1,12 +1,29 @@
 let currentData = null;
 
+// Helper function for port-based communication
+async function communicateWithLLM(message) {
+    const port = browser.runtime.connect({ name: "llm" });
+    
+    return new Promise((resolve, reject) => {
+        port.onMessage.addListener((response) => {
+            if (response.type === 'error') {
+                reject(new Error(response.error));
+            } else {
+                resolve(response);
+            }
+        });
+        
+        port.postMessage(message);
+    });
+}
+
 async function init() {
     try {
-        // Get data from the background script
-        const response = await browser.runtime.sendMessage({ type: 'getLatest' });
-        if (response) {
-            currentData = response;
-            renderContent(response);
+        // Get data from the background script using port
+        const response = await communicateWithLLM({ type: 'getLatest' });
+        if (response && response.result) {
+            currentData = response.result;
+            renderContent(response.result);
         } else {
             // Fallback to storage if background script doesn't have data
             const { lastExtraction } = await browser.storage.local.get('lastExtraction');

@@ -1,5 +1,6 @@
 let port = null;
 let latestResult = null;
+let llmPorts = new Set();  // Track active LLM ports
 
 console.log('Background script loaded');
 
@@ -25,31 +26,54 @@ function sendNative(message) {
 
 // Build prompt for DOM classification
 function buildPrompt(snapshot) {
-    return `Given this DOM tree from a webpage, analyze the structure and identify:
-1. Primary content sections (articles, main content areas)
-2. Navigation elements
-3. Interactive controls
-4. Important metadata
+  return `Given this simplified DOM tree, classify nodes into the functional
+categories listed below and produce precise CSS selectors for each one.
 
-Return CSS selectors that precisely capture these elements, avoiding overly broad matches.
-For each selector, specify:
-- name: A descriptive label
-- css: The CSS selector
-- maxItems: Maximum number of items to extract (to prevent runaway matches)
+Functional categories
+- main-text
+- main-table
+- main-widget
+- contextual
+- nav
+- controls
+- branding
+- comments
+- utility
 
-Current DOM tree (simplified):
-${JSON.stringify(snapshot, null, 2)}
+Ignore categories
+- ignore-ad
+- ignore-tracker
+- ignore-decorative
+- ignore-cookie-banner
+- ignore-popover
+- ignore-skeleton
+- ignore-placeholder
+- ignore-print-only
+- ignore-offscreen
 
-Respond with a JSON object containing:
+Return a JSON object:
+
 {
   "selectors": [
-    {"name": "string", "css": "string", "maxItems": number},
-    ...
+    { "name": "<category>", "css": "<selector>", "maxItems": <integer> },
+    …
   ],
   "groups": {
-    "Page": ["selector_name1", "selector_name2", ...]
+    "Page": [ "<category1>", "<category2>", … ]   // reading order, top-to-bottom
   }
-}`;
+}
+
+Rules
+1. Use the exact category names shown above.  
+2. Omit any category that does not appear in the page.  
+3. Selectors must cover only the intended nodes and avoid overly broad matches.  
+4. Set maxItems to the expected count or a safe upper bound for each selector.  
+5. Prefer stable attributes over dynamic class names when possible.
+
+Current DOM tree (truncated):
+${JSON.stringify(snapshot, null, 2)}
+
+Respond with the JSON object only.`;
 }
 
 // Make LLM API call
@@ -98,71 +122,77 @@ async function fetchLLM(prompt) {
 }
 
 // Message router
-browser.runtime.onMessage.addListener(async (msg, sender) => {
-    console.log('Received message:', msg.type, 'from:', sender);
-    try {
-        if (msg.type === 'pingLLM') {
-            console.log('Testing LLM connection...');
-            // For the test connection, use a simpler API call without json_object format
-            const { apiKey } = await browser.storage.local.get('apiKey');
-            console.log('Test connection - API key:', apiKey ? 'Present' : 'Missing');
-            if (!apiKey) throw new Error('API key not set');
-
-            console.log('Making test API request...');
-            const resp = await fetch('https://api.openai.com/v1/chat/completions', {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${apiKey}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    model: 'gpt-4-turbo-preview',
-                    messages: [{ role: 'user', content: 'Say exactly: ok' }],
-                    temperature: 0.1
-                })
-            });
-
-            console.log('Test API response status:', resp.status);
-            if (!resp.ok) {
-                const error = await resp.text();
-                console.error('Test API error response:', error);
-                throw new Error(`API error: ${error}`);
-            }
-
-            const data = await resp.json();
-            console.log('Test API response data:', data);
-            const content = data.choices[0].message.content.toLowerCase().trim();
-            const result = content === 'ok' || content === 'ok.';
-            console.log('Test connection result:', result, 'content:', content);
-            return result;
-        }
+browser.runtime.onConnect.addListener((port) => {
+    console.log('New connection:', port.name);
+    if (port.name === 'llm') {
+        llmPorts.add(port);
         
-        if (msg.type === 'classifyDOM') {
-            console.log('Classifying DOM...');
-            const prompt = buildPrompt(msg.snapshot);
-            const result = await fetchLLM(prompt);
-            console.log('Classification result:', result);
-            return result;
-        }
+        port.onMessage.addListener(async (msg) => {
+            console.log('Received LLM port message:', msg.type);
+            try {
+                if (msg.type === 'pingLLM') {
+                    console.log('Testing LLM connection...');
+                    const { apiKey } = await browser.storage.local.get('apiKey');
+                    if (!apiKey) throw new Error('API key not set');
 
-        if (msg.type === 'openViewer') {
-            console.log('Opening viewer with data:', msg.data);
-            // Store the latest result
-            latestResult = msg.data;
-            
-            // Open the viewer in a new tab
-            const viewerUrl = browser.runtime.getURL('ui/viewer.html');
-            await browser.tabs.create({ url: viewerUrl });
-            return true;
-        }
+                    const resp = await fetch('https://api.openai.com/v1/chat/completions', {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': `Bearer ${apiKey}`,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            model: 'gpt-4-turbo-preview',
+                            messages: [{ role: 'user', content: 'Say exactly: ok' }],
+                            temperature: 0.1
+                        })
+                    });
 
-        if (msg.type === 'getLatest') {
-            console.log('Getting latest result:', latestResult);
-            return latestResult;
-        }
-    } catch (e) {
-        console.error('Error in message handler:', e);
-        return null;
+                    if (!resp.ok) {
+                        const error = await resp.text();
+                        throw new Error(`API error: ${error}`);
+                    }
+
+                    const data = await resp.json();
+                    const content = data.choices[0].message.content.toLowerCase().trim();
+                    const result = content === 'ok' || content === 'ok.';
+                    port.postMessage({ type: 'pingLLM', result });
+                }
+                
+                if (msg.type === 'classifyDOM') {
+                    console.log('Classifying DOM...');
+                    const prompt = buildPrompt(msg.snapshot);
+                    const result = await fetchLLM(prompt);
+                    console.log('Classification result:', result);
+                    port.postMessage({ type: 'classifyDOM', result });
+                }
+
+                if (msg.type === 'openViewer') {
+                    console.log('Opening viewer with data:', msg.data);
+                    latestResult = msg.data;
+                    const viewerUrl = browser.runtime.getURL('ui/viewer.html');
+                    await browser.tabs.create({ url: viewerUrl });
+                    port.postMessage({ type: 'openViewer', success: true });
+                }
+
+                if (msg.type === 'getLatest') {
+                    console.log('Getting latest result:', latestResult);
+                    port.postMessage({ type: 'getLatest', result: latestResult });
+                }
+            } catch (e) {
+                console.error('Error in LLM port handler:', e);
+                port.postMessage({ type: 'error', error: e.message });
+            } finally {
+                // Clean up the port after handling the message
+                port.disconnect();
+                llmPorts.delete(port);
+            }
+        });
+
+        port.onDisconnect.addListener(() => {
+            console.log('LLM port disconnected');
+            llmPorts.delete(port);
+        });
     }
 });
 

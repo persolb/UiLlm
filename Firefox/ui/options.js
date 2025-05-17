@@ -21,6 +21,23 @@ async function saveKey() {
     }
 }
 
+// Helper function for port-based communication
+async function communicateWithLLM(message) {
+    const port = browser.runtime.connect({ name: "llm" });
+    
+    return new Promise((resolve, reject) => {
+        port.onMessage.addListener((response) => {
+            if (response.type === 'error') {
+                reject(new Error(response.error));
+            } else {
+                resolve(response);
+            }
+        });
+        
+        port.postMessage(message);
+    });
+}
+
 // Test connection
 async function testConnection() {
     const key = document.getElementById('key').value.trim();
@@ -30,8 +47,12 @@ async function testConnection() {
     }
 
     try {
-        const ok = await browser.runtime.sendMessage({ type: 'pingLLM' });
-        if (ok) {
+        // Save the key first
+        await browser.storage.local.set({ apiKey: key });
+        
+        // Test the connection using port
+        const response = await communicateWithLLM({ type: 'pingLLM' });
+        if (response && response.result) {
             showStatus('Connection test successful!', 'success');
         } else {
             showStatus('Connection test failed. Please check your API key.', 'error');
