@@ -2,13 +2,20 @@ let currentData = null;
 
 async function init() {
     try {
-        // Get the last extraction from storage
-        const { lastExtraction } = await browser.storage.local.get('lastExtraction');
-        if (lastExtraction) {
-            currentData = lastExtraction;
-            renderContent(lastExtraction);
+        // Get data from the background script
+        const response = await browser.runtime.sendMessage({ type: 'getLatest' });
+        if (response) {
+            currentData = response;
+            renderContent(response);
         } else {
-            document.querySelector('.loading').textContent = 'No content available';
+            // Fallback to storage if background script doesn't have data
+            const { lastExtraction } = await browser.storage.local.get('lastExtraction');
+            if (lastExtraction) {
+                currentData = lastExtraction;
+                renderContent(lastExtraction);
+            } else {
+                document.querySelector('.loading').textContent = 'No content available';
+            }
         }
     } catch (e) {
         console.error('Failed to initialize viewer:', e);

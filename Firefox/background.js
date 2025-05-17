@@ -144,6 +144,22 @@ browser.runtime.onMessage.addListener(async (msg, sender) => {
             console.log('Classification result:', result);
             return result;
         }
+
+        if (msg.type === 'openViewer') {
+            console.log('Opening viewer with data:', msg.data);
+            // Store the latest result
+            latestResult = msg.data;
+            
+            // Open the viewer in a new tab
+            const viewerUrl = browser.runtime.getURL('ui/viewer.html');
+            await browser.tabs.create({ url: viewerUrl });
+            return true;
+        }
+
+        if (msg.type === 'getLatest') {
+            console.log('Getting latest result:', latestResult);
+            return latestResult;
+        }
     } catch (e) {
         console.error('Error in message handler:', e);
         return null;
