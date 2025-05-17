@@ -3,10 +3,18 @@
   "name": "LLM Content Extractor",
   "description": "Extracts important page contents using an LLM-backed helper",
   "version": "0.1",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "llmcontentextractor@example.com",
+      "strict_min_version": "109.0"
+    }
+  },
   "permissions": [
     "activeTab",
     "scripting",
-    "nativeMessaging"
+    "nativeMessaging",
+    "storage",
+    "tabs"
   ],
   "host_permissions": [
     "<all_urls>"
