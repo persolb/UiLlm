@@ -149,6 +149,10 @@ function addDebugStyles() {
     const style = document.createElement('style');
     style.id = styleId;
     style.textContent = `
+        /* Base styles for debug elements */
+        [class*="uillm-debug-"] {
+            position: relative !important;
+        }
         .uillm-debug-main-text,
         .uillm-debug-main-widget {
             background-color: ${DEBUG_COLORS['main-text']} !important;
@@ -166,10 +170,57 @@ function addDebugStyles() {
             background-color: ${DEBUG_COLORS.ignore} !important;
             outline: 2px solid ${DEBUG_COLORS.ignore.replace('0.3', '0.8')} !important;
         }
-        .uillm-debug-element {
-            position: relative !important;
+
+        /* Hide styles for each category */
+        body[data-hide-main-text="true"] .uillm-debug-main-text,
+        body[data-hide-main-widget="true"] .uillm-debug-main-widget,
+        body[data-hide-branding="true"] .uillm-debug-branding,
+        body[data-hide-nav="true"] .uillm-debug-nav,
+        body[data-hide-ignore="true"] .uillm-debug-ignore {
+            display: none !important;
         }
-        .uillm-debug-element:hover::after {
+
+        /* Legend styles */
+        #uillm-debug-legend {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: white;
+            padding: 10px;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            font-family: Arial, sans-serif;
+            font-size: 12px;
+            z-index: 2147483647;
+            pointer-events: auto;
+            user-select: none;
+        }
+        #uillm-debug-legend .legend-item {
+            display: flex;
+            align-items: center;
+            margin: 5px 0;
+            cursor: pointer;
+            padding: 4px 8px;
+            border-radius: 4px;
+            transition: all 0.2s ease;
+        }
+        #uillm-debug-legend .legend-item:hover {
+            background-color: rgba(0, 0, 0, 0.05);
+        }
+        #uillm-debug-legend .legend-item.hidden {
+            opacity: 0.5;
+        }
+        #uillm-debug-legend .legend-item.hidden .color-swatch {
+            opacity: 0.5;
+        }
+        #uillm-debug-legend .color-swatch {
+            width: 15px;
+            height: 15px;
+            margin-right: 8px;
+            border: 1px solid rgba(0,0,0,0.2);
+            transition: opacity 0.2s;
+        }
+        [class*="uillm-debug-"]:hover::after {
             content: attr(data-uillm-category) "\\A" attr(data-uillm-selector);
             position: absolute;
             top: 100%;
@@ -183,30 +234,6 @@ function addDebugStyles() {
             white-space: pre;
             z-index: 2147483647;
             pointer-events: none;
-        }
-        #uillm-debug-legend {
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            background: white;
-            padding: 10px;
-            border-radius: 5px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-            font-family: Arial, sans-serif;
-            font-size: 12px;
-            z-index: 2147483647;
-            pointer-events: auto;
-        }
-        #uillm-debug-legend .legend-item {
-            display: flex;
-            align-items: center;
-            margin: 5px 0;
-        }
-        #uillm-debug-legend .color-swatch {
-            width: 15px;
-            height: 15px;
-            margin-right: 8px;
-            border: 1px solid rgba(0,0,0,0.2);
         }
     `;
     document.head.appendChild(style);
@@ -232,6 +259,9 @@ function createDebugOverlay(selectors) {
     
     // Add debug styles if not already present
     addDebugStyles();
+    
+    // Track visible categories
+    const visibleCategories = new Set(['main-text', 'main-widget', 'branding', 'nav', 'ignore']);
     
     // Apply debug classes to elements
     selectors.forEach(selector => {
@@ -260,24 +290,36 @@ function createDebugOverlay(selectors) {
                     debugClass = 'uillm-debug-nav';
                 }
                 
-                element.classList.add(debugClass, 'uillm-debug-element');
+                element.classList.add(debugClass);
                 element.setAttribute('data-uillm-category', selector.name);
                 element.setAttribute('data-uillm-selector', selector.css);
                 
-                console.log(`Added debug class to element ${index}`);
+                console.log(`Added debug class to element ${index}:`, debugClass);
             });
         } catch (error) {
             console.error(`Error processing selector ${selector.name}:`, error);
         }
     });
     
-    // Create legend
+    // Create legend with toggle functionality
     const legend = document.createElement('div');
     legend.id = 'uillm-debug-legend';
+    
+    // Add a title
+    const title = document.createElement('div');
+    title.style.cssText = `
+        font-weight: bold;
+        margin-bottom: 8px;
+        padding-bottom: 4px;
+        border-bottom: 1px solid #eee;
+    `;
+    title.textContent = 'Debug Categories (click to toggle)';
+    legend.appendChild(title);
     
     Object.entries(DEBUG_COLORS).forEach(([category, color]) => {
         const item = document.createElement('div');
         item.className = 'legend-item';
+        item.dataset.category = category;
         
         const swatch = document.createElement('div');
         swatch.className = 'color-swatch';
@@ -289,6 +331,25 @@ function createDebugOverlay(selectors) {
         
         item.appendChild(swatch);
         item.appendChild(label);
+        
+        // Add click handler for toggling
+        item.addEventListener('click', () => {
+            const isHidden = item.classList.toggle('hidden');
+            const dataAttr = `data-hide-${category}`;
+            
+            if (isHidden) {
+                document.body.setAttribute(dataAttr, 'true');
+                visibleCategories.delete(category);
+            } else {
+                document.body.removeAttribute(dataAttr);
+                visibleCategories.add(category);
+            }
+            
+            console.log(`Toggled ${category}: ${isHidden ? 'hidden' : 'visible'}`);
+            console.log(`Elements with class uillm-debug-${category}:`, 
+                document.querySelectorAll(`.uillm-debug-${category}`).length);
+        });
+        
         legend.appendChild(item);
     });
     
