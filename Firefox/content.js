@@ -139,33 +139,101 @@ const DEBUG_COLORS = {
     'ignore': 'rgba(255, 0, 0, 0.3)'            // red
 };
 
-// Create debug overlay with highlighted elements
+// Add debug styles to the page
+function addDebugStyles() {
+    const styleId = 'uillm-debug-styles';
+    if (document.getElementById(styleId)) {
+        return;
+    }
+
+    const style = document.createElement('style');
+    style.id = styleId;
+    style.textContent = `
+        .uillm-debug-main-text,
+        .uillm-debug-main-widget {
+            background-color: ${DEBUG_COLORS['main-text']} !important;
+            outline: 2px solid ${DEBUG_COLORS['main-text'].replace('0.3', '0.8')} !important;
+        }
+        .uillm-debug-branding {
+            background-color: ${DEBUG_COLORS.branding} !important;
+            outline: 2px solid ${DEBUG_COLORS.branding.replace('0.3', '0.8')} !important;
+        }
+        .uillm-debug-nav {
+            background-color: ${DEBUG_COLORS.nav} !important;
+            outline: 2px solid ${DEBUG_COLORS.nav.replace('0.3', '0.8')} !important;
+        }
+        .uillm-debug-ignore {
+            background-color: ${DEBUG_COLORS.ignore} !important;
+            outline: 2px solid ${DEBUG_COLORS.ignore.replace('0.3', '0.8')} !important;
+        }
+        .uillm-debug-element {
+            position: relative !important;
+        }
+        .uillm-debug-element:hover::after {
+            content: attr(data-uillm-category) "\\A" attr(data-uillm-selector);
+            position: absolute;
+            top: 100%;
+            left: 0;
+            background: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            font-family: Arial, sans-serif;
+            font-size: 12px;
+            white-space: pre;
+            z-index: 2147483647;
+            pointer-events: none;
+        }
+        #uillm-debug-legend {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: white;
+            padding: 10px;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            font-family: Arial, sans-serif;
+            font-size: 12px;
+            z-index: 2147483647;
+            pointer-events: auto;
+        }
+        #uillm-debug-legend .legend-item {
+            display: flex;
+            align-items: center;
+            margin: 5px 0;
+        }
+        #uillm-debug-legend .color-swatch {
+            width: 15px;
+            height: 15px;
+            margin-right: 8px;
+            border: 1px solid rgba(0,0,0,0.2);
+        }
+    `;
+    document.head.appendChild(style);
+}
+
+// Create debug visualization using CSS classes
 function createDebugOverlay(selectors) {
-    console.log('=== Creating Debug Overlay ===');
+    console.log('=== Creating Debug Visualization ===');
     console.log('Selectors:', selectors);
     
-    // Remove existing overlay if any
-    const existingOverlay = document.getElementById('uillm-debug-overlay');
-    if (existingOverlay) {
-        console.log('Removing existing overlay');
-        existingOverlay.remove();
+    // Remove existing debug classes and legend
+    document.querySelectorAll('[class*="uillm-debug-"]').forEach(el => {
+        el.classList.remove('uillm-debug-main-text', 'uillm-debug-main-widget', 
+                          'uillm-debug-branding', 'uillm-debug-nav', 'uillm-debug-ignore',
+                          'uillm-debug-element');
+        el.removeAttribute('data-uillm-category');
+        el.removeAttribute('data-uillm-selector');
+    });
+    const existingLegend = document.getElementById('uillm-debug-legend');
+    if (existingLegend) {
+        existingLegend.remove();
     }
     
-    // Create overlay container
-    const overlay = document.createElement('div');
-    overlay.id = 'uillm-debug-overlay';
-    overlay.style.cssText = `
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        pointer-events: none;
-        z-index: 2147483647;
-        background: transparent;
-    `;
+    // Add debug styles if not already present
+    addDebugStyles();
     
-    // Create highlight elements for each selector
+    // Apply debug classes to elements
     selectors.forEach(selector => {
         console.log(`Processing selector: ${selector.name} (${selector.css})`);
         try {
@@ -173,82 +241,48 @@ function createDebugOverlay(selectors) {
             console.log(`Found ${elements.length} elements for selector:`, selector);
             
             elements.forEach((element, index) => {
+                // Skip elements with zero dimensions
                 const rect = element.getBoundingClientRect();
                 if (rect.width === 0 || rect.height === 0) {
                     console.log(`Skipping element ${index} with zero dimensions`);
                     return;
                 }
                 
-                const highlight = document.createElement('div');
-                
-                // Determine color based on category
-                let color = DEBUG_COLORS.ignore;
+                // Add debug class based on category
+                let debugClass = 'uillm-debug-ignore';
                 if (selector.name.startsWith('ignore-')) {
-                    color = DEBUG_COLORS.ignore;
+                    debugClass = 'uillm-debug-ignore';
                 } else if (selector.name === 'main-text' || selector.name === 'main-widget') {
-                    color = DEBUG_COLORS['main-text'];
+                    debugClass = selector.name === 'main-text' ? 'uillm-debug-main-text' : 'uillm-debug-main-widget';
                 } else if (selector.name === 'branding') {
-                    color = DEBUG_COLORS.branding;
+                    debugClass = 'uillm-debug-branding';
                 } else if (selector.name === 'nav') {
-                    color = DEBUG_COLORS.nav;
+                    debugClass = 'uillm-debug-nav';
                 }
                 
-                highlight.style.cssText = `
-                    position: absolute;
-                    top: ${rect.top + window.scrollY}px;
-                    left: ${rect.left + window.scrollX}px;
-                    width: ${rect.width}px;
-                    height: ${rect.height}px;
-                    background-color: ${color};
-                    border: 2px solid ${color.replace('0.3', '0.8')};
-                    pointer-events: none;
-                    z-index: 2147483646;
-                    box-sizing: border-box;
-                `;
+                element.classList.add(debugClass, 'uillm-debug-element');
+                element.setAttribute('data-uillm-category', selector.name);
+                element.setAttribute('data-uillm-selector', selector.css);
                 
-                // Add tooltip with category and selector
-                highlight.title = `${selector.name}\n${selector.css}`;
-                
-                overlay.appendChild(highlight);
-                console.log(`Added highlight for element ${index}`);
+                console.log(`Added debug class to element ${index}`);
             });
         } catch (error) {
             console.error(`Error processing selector ${selector.name}:`, error);
         }
     });
     
-    // Add legend
+    // Create legend
     const legend = document.createElement('div');
-    legend.style.cssText = `
-        position: fixed;
-        bottom: 20px;
-        right: 20px;
-        background: white;
-        padding: 10px;
-        border-radius: 5px;
-        box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-        font-family: Arial, sans-serif;
-        font-size: 12px;
-        z-index: 2147483647;
-        pointer-events: auto;
-    `;
+    legend.id = 'uillm-debug-legend';
     
     Object.entries(DEBUG_COLORS).forEach(([category, color]) => {
         const item = document.createElement('div');
-        item.style.cssText = `
-            display: flex;
-            align-items: center;
-            margin: 5px 0;
-        `;
+        item.className = 'legend-item';
         
         const swatch = document.createElement('div');
-        swatch.style.cssText = `
-            width: 15px;
-            height: 15px;
-            background-color: ${color};
-            border: 1px solid ${color.replace('0.3', '0.8')};
-            margin-right: 8px;
-        `;
+        swatch.className = 'color-swatch';
+        swatch.style.backgroundColor = color;
+        swatch.style.borderColor = color.replace('0.3', '0.8');
         
         const label = document.createElement('span');
         label.textContent = category;
@@ -258,29 +292,8 @@ function createDebugOverlay(selectors) {
         legend.appendChild(item);
     });
     
-    overlay.appendChild(legend);
-    document.body.appendChild(overlay);
-    console.log('Debug overlay added to page');
-    
-    // Update positions on scroll and resize
-    let updateTimeout;
-    function updatePositions() {
-        if (updateTimeout) clearTimeout(updateTimeout);
-        updateTimeout = setTimeout(() => {
-            console.log('Updating overlay positions');
-            overlay.remove();
-            createDebugOverlay(selectors);
-        }, 100);
-    }
-    
-    window.addEventListener('scroll', updatePositions);
-    window.addEventListener('resize', updatePositions);
-    
-    // Log final state
-    console.log('Debug overlay creation complete');
-    console.log('Overlay element:', overlay);
-    console.log('Overlay parent:', overlay.parentElement);
-    console.log('Overlay style:', overlay.style.cssText);
+    document.body.appendChild(legend);
+    console.log('Debug visualization complete');
 }
 
 // Helper function for port-based communication
