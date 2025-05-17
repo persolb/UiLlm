@@ -1,0 +1,19 @@
+.source {
+    background: var(--bg-secondary);
+    padding: 1rem;
+    margin-bottom: 1.5rem;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+}
+
+.source a {
+    color: var(--accent);
+    text-decoration: none;
+    word-break: break-all;
+}
+
+.source a:hover {
+    text-decoration: underline;
+} 

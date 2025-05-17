@@ -1,0 +1,24 @@
+{
+  "name": "llm-aided-page-cleaner",
+  "version": "0.1.0",
+  "description": "A Firefox extension that uses LLM to extract and clean page content",
+  "scripts": {
+    "test": "jest",
+    "test:integration": "playwright test",
+    "lint": "web-ext lint",
+    "build": "web-ext build",
+    "start": "web-ext run --firefox=firefox-developer-edition"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.40.0",
+    "jest": "^29.7.0",
+    "jest-environment-jsdom": "^29.7.0",
+    "web-ext": "^7.10.0"
+  },
+  "jest": {
+    "testEnvironment": "jsdom",
+    "testMatch": ["**/__tests__/**/*.test.js"],
+    "collectCoverage": true,
+    "coverageDirectory": "coverage"
+  }
+} 

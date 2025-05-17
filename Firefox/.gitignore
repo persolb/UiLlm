@@ -7,6 +7,12 @@ __pycache__/
 venv/
 ENV/
 
+# Node.js
+node_modules/
+.bin/
+Firefox/node_modules/.bin/
+*.log
+
 # Environment and keys
 .env
 native_helper/keys.py

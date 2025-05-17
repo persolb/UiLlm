@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LLM Cleaner Viewer</title>
+    <link rel="stylesheet" href="viewer.css">
+</head>
+<body>
+    <header>
+        <h1>Cleaned Content</h1>
+        <div class="controls">
+            <button id="copyJson">Copy JSON</button>
+            <button id="exportHtml">Export HTML</button>
+            <select id="themeSelect">
+                <option value="light">Light Theme</option>
+                <option value="dark">Dark Theme</option>
+                <option value="sepia">Sepia Theme</option>
+            </select>
+        </div>
+    </header>
+    <main id="content">
+        <div class="loading">Loading content...</div>
+    </main>
+    <script src="viewer.js"></script>
+</body>
+</html> 
