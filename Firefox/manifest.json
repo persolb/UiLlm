@@ -1,0 +1,33 @@
+{
+  "manifest_version": 3,
+  "name": "LLM Content Extractor",
+  "description": "Extracts important page contents using an LLM-backed helper",
+  "version": "0.1",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "nativeMessaging"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "Extract Content"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["viewer.html", "viewer.css", "viewer.js"],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}
