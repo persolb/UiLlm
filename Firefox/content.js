@@ -91,6 +91,26 @@ function createSnapshot() {
     return out;
 }
 
+// Helper function to clean text content
+function cleanText(text) {
+    if (!text) return '';
+    
+    // Remove JavaScript code blocks
+    text = text.replace(/if\s*\([^)]*\)\s*{[^}]*}/g, '');
+    text = text.replace(/window\.[^;]*;/g, '');
+    text = text.replace(/console\.[^;]*;/g, '');
+    
+    // Remove ad-related content
+    text = text.replace(/Strike\.insertAd[^;]*;/g, '');
+    text = text.replace(/ad-[^"'\s]*/g, '');
+    
+    // Remove multiple newlines and spaces
+    text = text.replace(/\n\s*\n\s*\n/g, '\n\n');
+    text = text.replace(/\s{2,}/g, ' ');
+    
+    return text.trim();
+}
+
 // Apply selectors and extract content
 async function applySelectors(selectors) {
     if (!selectors || !selectors.selectors) return;
@@ -105,15 +125,31 @@ async function applySelectors(selectors) {
                 .slice(0, sel.maxItems || 30);
 
             result[sel.name] = nodes.map(node => {
-                // Extract text or href safely
-                const href = getAttributeValue(node, 'href');
-                if (href) return href;
+                // Extract text or href
+                if (node.href) return node.href;
+                if (node.value) return node.value;
                 
-                const value = getAttributeValue(node, 'value');
-                if (value) return value;
+                // Clean the text content
+                let content = node.textContent.trim();
                 
-                return node.textContent.trim();
-            }).filter(Boolean);
+                // Special handling for article body and content sections
+                if (sel.name === 'Article Body' || sel.name.includes('Content')) {
+                    // Remove script tags and their content
+                    const scripts = node.getElementsByTagName('script');
+                    while (scripts.length > 0) {
+                        scripts[0].parentNode.removeChild(scripts[0]);
+                    }
+                    
+                    // Remove ad-related elements
+                    const adElements = node.querySelectorAll('[class*="ad-"], [id*="ad-"], [class*="advertisement"], [id*="advertisement"]');
+                    adElements.forEach(el => el.parentNode.removeChild(el));
+                    
+                    // Get clean text content
+                    content = cleanText(node.textContent);
+                }
+                
+                return content;
+            }).filter(Boolean); // Remove empty strings
         } catch (e) {
             console.error(`Error applying selector ${sel.name}:`, e);
             result[sel.name] = [];

@@ -56,23 +56,39 @@ function renderContent(data) {
                 groupHeader.textContent = selectorName;
                 group.appendChild(groupHeader);
 
-                items.forEach(item => {
-                    const div = document.createElement('div');
-                    div.className = 'item';
-                    
-                    // If item is a URL, make it a link
-                    if (item.startsWith('http')) {
-                        const a = document.createElement('a');
-                        a.href = item;
-                        a.textContent = item;
-                        a.target = '_blank';
-                        div.appendChild(a);
-                    } else {
-                        div.textContent = item;
-                    }
-                    
-                    group.appendChild(div);
-                });
+                // Special handling for article body and other text-heavy content
+                if (selectorName === 'Article Body' || selectorName.includes('Content')) {
+                    items.forEach(item => {
+                        // Split text into paragraphs and handle them separately
+                        const paragraphs = item.split(/\n\s*\n/).filter(p => p.trim());
+                        paragraphs.forEach(paragraph => {
+                            const div = document.createElement('div');
+                            div.className = 'item paragraph';
+                            div.textContent = paragraph.trim();
+                            group.appendChild(div);
+                        });
+                    });
+                } else {
+                    items.forEach(item => {
+                        const div = document.createElement('div');
+                        div.className = 'item';
+                        
+                        // If item is a URL, make it a link
+                        if (item.startsWith('http')) {
+                            const a = document.createElement('a');
+                            a.href = item;
+                            a.textContent = item;
+                            a.target = '_blank';
+                            div.appendChild(a);
+                        } else {
+                            // For other text, preserve line breaks
+                            const text = item.replace(/\n/g, '<br>');
+                            div.innerHTML = text;
+                        }
+                        
+                        group.appendChild(div);
+                    });
+                }
 
                 content.appendChild(group);
             }
@@ -82,6 +98,99 @@ function renderContent(data) {
         main.appendChild(section);
     }
 }
+
+// Add some CSS styles
+const style = document.createElement('style');
+style.textContent = `
+    .selector-group {
+        margin-bottom: 2em;
+        padding: 1em;
+        border: 1px solid #eee;
+        border-radius: 4px;
+    }
+
+    .selector-group h3 {
+        margin-top: 0;
+        color: #333;
+        border-bottom: 2px solid #eee;
+        padding-bottom: 0.5em;
+    }
+
+    .item {
+        margin: 0.5em 0;
+        line-height: 1.5;
+    }
+
+    .item.paragraph {
+        margin: 1em 0;
+        text-align: justify;
+    }
+
+    .item a {
+        color: #0066cc;
+        text-decoration: none;
+    }
+
+    .item a:hover {
+        text-decoration: underline;
+    }
+
+    section {
+        margin: 2em 0;
+    }
+
+    section h2 {
+        color: #222;
+        border-bottom: 3px solid #eee;
+        padding-bottom: 0.5em;
+    }
+
+    .source {
+        background: #f5f5f5;
+        padding: 1em;
+        margin-bottom: 2em;
+        border-radius: 4px;
+        font-size: 0.9em;
+    }
+
+    .source a {
+        color: #0066cc;
+        text-decoration: none;
+    }
+
+    .source a:hover {
+        text-decoration: underline;
+    }
+
+    [data-theme="dark"] {
+        background: #1a1a1a;
+        color: #eee;
+    }
+
+    [data-theme="dark"] .selector-group {
+        border-color: #333;
+        background: #222;
+    }
+
+    [data-theme="dark"] .selector-group h3 {
+        color: #eee;
+        border-color: #333;
+    }
+
+    [data-theme="dark"] .source {
+        background: #222;
+    }
+
+    [data-theme="dark"] section h2 {
+        color: #eee;
+        border-color: #333;
+    }
+
+    [data-theme="dark"] .item a {
+        color: #66b3ff;
+    }
+`;
+document.head.appendChild(style);
 
 // Theme handling
 function setTheme(theme) {
